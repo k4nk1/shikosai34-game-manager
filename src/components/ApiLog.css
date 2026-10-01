@@ -1,0 +1,159 @@
+.api-log-container {
+  margin-top: 8px;
+  background-color: #1e293b;
+  border-radius: 8px;
+  color: #f1f5f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.api-log-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.api-log-header:hover {
+  background-color: #334155;
+}
+
+.log-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.log-title {
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.latest-badge {
+  font-size: 10px;
+  color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.15);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.toggle-arrow {
+  font-size: 10px;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.api-log-content {
+  border-top: 1px solid #334155;
+  padding: 8px;
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.api-log-helper {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.log-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.empty-log {
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+  padding: 12px 0;
+}
+
+.log-item {
+  background-color: #0f172a;
+  border-radius: 6px;
+  padding: 6px 8px;
+  border-left: 3px solid #64748b;
+  font-size: 11px;
+}
+
+.log-type-request {
+  border-left-color: #38bdf8;
+}
+
+.log-type-response {
+  border-left-color: #4ade80;
+}
+
+.log-type-error {
+  border-left-color: #f87171;
+}
+
+.log-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.log-time {
+  color: #64748b;
+}
+
+.log-badge {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9px;
+}
+
+.badge-request {
+  background-color: #0284c7;
+  color: #ffffff;
+}
+
+.badge-response {
+  background-color: #16a34a;
+  color: #ffffff;
+}
+
+.badge-error {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.log-endpoint {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.log-payload {
+  margin: 0;
+  padding: 4px 6px;
+  background-color: #020617;
+  border-radius: 4px;
+  color: #a5f3fc;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

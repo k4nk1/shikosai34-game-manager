@@ -1,0 +1,21 @@
+.grid-wrapper {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+/* 画面幅が極端に狭く3列が崩れる端末（310px未満）では1列にフォールバック */
+@media (max-width: 310px) {
+  .game-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
