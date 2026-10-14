@@ -1,200 +1,231 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { GameDefinition, GameState, GameWithState, ApiLogEntry } from '../types/game';
-import { api, GameStartPayload, GameEndPayload } from '../services/api';
-import { calculateEstimatedEndTime } from '../utils/timerUtils';
+import { DisplayGame, ApiGameItem, ApiErrorResult } from '../types/game';
+import { api } from '../services/api';
 
-const STORAGE_KEY = 'shikosai34_game_states';
+const AUTO_REFRESH_INTERVAL_MS = 60000; // 60秒同期
 
 export function useGameManager() {
-  const [games, setGames] = useState<GameDefinition[]>([]);
-  const [gameStates, setGameStates] = useState<Record<string, GameState>>({});
+  const [games, setGames] = useState<DisplayGame[]>([]);
   const [now, setNow] = useState<number>(Date.now());
-  const [logs, setLogs] = useState<ApiLogEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [updatingGameId, setUpdatingGameId] = useState<number | null>(null);
 
-  // localStorage へのバックアップ同期
-  const saveStatesToStorage = (states: Record<string, GameState>) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(states));
-    } catch (e) {
-      console.error('Failed to save to localStorage:', e);
-    }
-  };
+  // 認証関連ステート
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // 1. 初回マウント時: APIログ購読、ゲーム定義取得、利用状況取得
-  useEffect(() => {
-    const unsubscribe = api.onLog((entry) => {
-      setLogs((prev) => [entry, ...prev].slice(0, 50)); // 最新50件保持
+  // アラート関連ステート (結果未確認・エラー通知)
+  const [unconfirmedMessage, setUnconfirmedMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // APIレスポンスを画面用データに変換
+  const mapApiGamesToDisplay = useCallback((items: ApiGameItem[]): DisplayGame[] => {
+    // ID順にソート (api.md: "ID順に返します")
+    const sorted = [...items].sort((a, b) => a.gameId - b.gameId);
+    return sorted.map((item, index) => {
+      const expectedEndAtMs = item.expectedEndAt
+        ? new Date(item.expectedEndAt).getTime()
+        : null;
+
+      return {
+        gameId: item.gameId,
+        name: item.name,
+        status: item.status,
+        expectedEndAtMs,
+        gridPosition: index + 1,
+      };
     });
-
-    const initData = async () => {
-      setLoading(true);
-      try {
-        const [loadedGames, loadedStatuses] = await Promise.all([
-          api.fetchGames(),
-          api.fetchCurrentStatuses(),
-        ]);
-
-        setGames(loadedGames);
-
-        // 初期ステートマップの作成
-        const mergedStates: Record<string, GameState> = {};
-        loadedGames.forEach((game) => {
-          if (loadedStatuses[game.id]) {
-            mergedStates[game.id] = loadedStatuses[game.id];
-          } else {
-            mergedStates[game.id] = {
-              status: 'idle',
-              startedAt: null,
-              durationMinutes: null,
-              estimatedEndAt: null,
-            };
-          }
-        });
-
-        setGameStates(mergedStates);
-      } catch (err) {
-        console.error('Initialization error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initData();
-
-    return () => {
-      unsubscribe();
-    };
   }, []);
 
-  // 2. 毎秒のタイマー更新
+  /**
+   * ゲーム一覧取得
+   */
+  const loadGames = useCallback(
+    async (isInitial = false) => {
+      const token = api.getAuthToken();
+      if (!token) {
+        setIsAuthModalOpen(true);
+        setLoading(false);
+        return;
+      }
+
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
+
+      try {
+        const items = await api.fetchGames();
+        setGames(mapApiGamesToDisplay(items));
+        setAuthError(null);
+        setErrorMessage(null);
+      } catch (err: unknown) {
+        const apiError = err as ApiErrorResult;
+        console.error('Failed to load games:', apiError);
+
+        if (apiError.code === 'UNAUTHENTICATED') {
+          setAuthError('認証IDが正しくありません (401)');
+          setIsAuthModalOpen(true);
+        } else {
+          setErrorMessage(apiError.message || 'データ取得に失敗しました');
+        }
+      } finally {
+        if (isInitial) setLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [mapApiGamesToDisplay]
+  );
+
+  // 初回マウント
+  useEffect(() => {
+    loadGames(true);
+  }, [loadGames]);
+
+  // 1秒ごとの時計更新
   useEffect(() => {
     const timerId = setInterval(() => {
       setNow(Date.now());
     }, 1000);
-
     return () => clearInterval(timerId);
   }, []);
 
-  // 最新の gameStates を参照するための Ref
-  const gameStatesRef = useRef(gameStates);
-  gameStatesRef.current = gameStates;
+  // 60秒ごとの自動ポーリング & 画面復帰時の自動再取得
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // 画面が表示されているときのみポーリング
+      if (document.visibilityState === 'visible') {
+        loadGames(false);
+      }
+    }, AUTO_REFRESH_INTERVAL_MS);
 
-  const gamesRef = useRef(games);
-  gamesRef.current = games;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadGames(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadGames]);
+
+  // 状態更新のRef保持
+  const loadGamesRef = useRef(loadGames);
+  loadGamesRef.current = loadGames;
 
   /**
-   * 将来のタイマー分離に備えた独立タイマー計算処理
+   * ゲーム利用開始 (status: "in_use")
    */
-  const computeTimer = useCallback((startTime: number, durationMinutes: number) => {
-    const estimatedEnd = calculateEstimatedEndTime(startTime, durationMinutes);
-    return {
-      startedAt: startTime,
-      durationMinutes,
-      estimatedEndAt: estimatedEnd,
-      timerStartedAt: startTime,
-    };
+  const handleStartGame = useCallback(async (gameId: number) => {
+    setUpdatingGameId(gameId);
+    setUnconfirmedMessage(null);
+    setErrorMessage(null);
+
+    try {
+      await api.updateGameStatus(gameId, 'in_use');
+      // 成功時: 最新の一覧・予定終了時刻を取得
+      await loadGamesRef.current(false);
+    } catch (err: unknown) {
+      const apiError = err as ApiErrorResult;
+      console.error('Start game error:', apiError);
+
+      if (apiError.isUnconfirmed) {
+        // 仕様: 結果未確認として一覧を再取得（自動再送はしない）
+        setUnconfirmedMessage(
+          `【結果未確認】通信が不安定またはサーバーエラーが発生しました。自動再送は行いません。現状を確認します。`
+        );
+        await loadGamesRef.current(false);
+      } else if (apiError.code === 'UNAUTHENTICATED') {
+        setAuthError('認証IDが正しくありません (401)');
+        setIsAuthModalOpen(true);
+      } else {
+        setErrorMessage(`開始エラー: ${apiError.message}`);
+        await loadGamesRef.current(false);
+      }
+    } finally {
+      setUpdatingGameId(null);
+    }
   }, []);
 
   /**
-   * ゲーム利用開始
-   * （現在は「開始ボタン押下」と「タイマー開始」を同時に実行）
+   * ゲーム利用終了 (status: "available")
    */
-  const handleStartGame = useCallback(
-    async (gameId: string) => {
-      const targetGame = gamesRef.current.find((g) => g.id === gameId);
-      if (!targetGame) return;
+  const handleEndGame = useCallback(async (gameId: number) => {
+    setUpdatingGameId(gameId);
+    setUnconfirmedMessage(null);
+    setErrorMessage(null);
 
-      const startedAt = Date.now();
-      const timerInfo = computeTimer(startedAt, targetGame.estimatedMinutes);
+    try {
+      await api.updateGameStatus(gameId, 'available');
+      // 成功時: 最新の一覧を取得して空き状態へ
+      await loadGamesRef.current(false);
+    } catch (err: unknown) {
+      const apiError = err as ApiErrorResult;
+      console.error('End game error:', apiError);
 
-      const nextState: GameState = {
-        status: 'playing',
-        ...timerInfo,
-      };
-
-      const updated = {
-        ...gameStatesRef.current,
-        [gameId]: nextState,
-      };
-
-      setGameStates(updated);
-      saveStatesToStorage(updated);
-
-      const payload: GameStartPayload = {
-        gameId: targetGame.id,
-        gameName: targetGame.name,
-        startedAt: new Date(startedAt).toISOString(),
-        startedAtMs: startedAt,
-        estimatedMinutes: targetGame.estimatedMinutes,
-        estimatedEndAt: new Date(timerInfo.estimatedEndAt).toISOString(),
-        estimatedEndAtMs: timerInfo.estimatedEndAt,
-      };
-
-      await api.notifyGameStart(payload);
-    },
-    [computeTimer]
-  );
-
-  /**
-   * ゲーム利用終了
-   */
-  const handleEndGame = useCallback(async (gameId: string) => {
-    const targetGame = gamesRef.current.find((g) => g.id === gameId);
-    if (!targetGame) return;
-
-    const endedAt = Date.now();
-
-    const nextState: GameState = {
-      status: 'idle',
-      startedAt: null,
-      durationMinutes: null,
-      estimatedEndAt: null,
-      timerStartedAt: null,
-    };
-
-    const updated = {
-      ...gameStatesRef.current,
-      [gameId]: nextState,
-    };
-
-    setGameStates(updated);
-    saveStatesToStorage(updated);
-
-    const payload: GameEndPayload = {
-      gameId: targetGame.id,
-      gameName: targetGame.name,
-      endedAt: new Date(endedAt).toISOString(),
-      endedAtMs: endedAt,
-    };
-
-    await api.notifyGameEnd(payload);
+      if (apiError.isUnconfirmed) {
+        // 仕様: 結果未確認として一覧を再取得（自動再送はしない）
+        setUnconfirmedMessage(
+          `【結果未確認】通信が不安定またはサーバーエラーが発生しました。自動再送は行いません。現状を確認します。`
+        );
+        await loadGamesRef.current(false);
+      } else if (apiError.code === 'UNAUTHENTICATED') {
+        setAuthError('認証IDが正しくありません (401)');
+        setIsAuthModalOpen(true);
+      } else {
+        setErrorMessage(`終了エラー: ${apiError.message}`);
+        await loadGamesRef.current(false);
+      }
+    } finally {
+      setUpdatingGameId(null);
+    }
   }, []);
 
-  // グリッド位置順にソートしたゲーム一覧（状態付き）
-  const gamesWithState: GameWithState[] = games
-    .slice()
-    .sort((a, b) => a.gridPosition - b.gridPosition)
-    .map((game) => ({
-      ...game,
-      state: gameStates[game.id] || {
-        status: 'idle',
-        startedAt: null,
-        durationMinutes: null,
-        estimatedEndAt: null,
-      },
-    }));
+  /**
+   * 認証ID保存
+   */
+  const handleSaveAuthToken = useCallback((token: string) => {
+    api.setAuthToken(token);
+    setAuthError(null);
+    setIsAuthModalOpen(false);
+    loadGamesRef.current(true);
+  }, []);
 
-  const activeCount = Object.values(gameStates).filter((s) => s.status === 'playing').length;
+  /**
+   * 手動更新ボタン押下
+   */
+  const handleManualRefresh = useCallback(() => {
+    loadGames(false);
+  }, [loadGames]);
+
+  const activeCount = games.filter((g) => g.status === 'in_use').length;
   const totalCount = games.length;
 
   return {
-    games: gamesWithState,
+    games,
     now,
-    logs,
     loading,
+    isRefreshing,
+    updatingGameId,
     activeCount,
     totalCount,
+    isAuthModalOpen,
+    authError,
+    unconfirmedMessage,
+    errorMessage,
+    currentToken: api.getAuthToken() || '',
+    openAuthModal: () => setIsAuthModalOpen(true),
+    closeAuthModal: () => setIsAuthModalOpen(false),
+    clearUnconfirmedMessage: () => setUnconfirmedMessage(null),
+    clearErrorMessage: () => setErrorMessage(null),
+    handleSaveAuthToken,
+    handleManualRefresh,
     handleStartGame,
     handleEndGame,
   };

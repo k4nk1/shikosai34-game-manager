@@ -1,31 +1,33 @@
-// ボードゲームのマスターデータ型
-export interface GameDefinition {
-  id: string;
+// API (api.md) のレスポンス型
+export interface ApiGameItem {
+  gameId: number;
   name: string;
-  estimatedMinutes: number;
-  gridPosition: number; // 1〜12 の配置インデックス
+  status: 'available' | 'in_use';
+  expectedEndAt: string | null; // ISO 8601 文字列 (例: "2026-10-08T01:30:00.000Z")
 }
 
-// ボードゲームの実行時状態型
-export interface GameState {
-  status: 'idle' | 'playing';
-  startedAt: number | null;        // ゲーム開始時刻 (ミリ秒)
-  durationMinutes: number | null;  // 想定プレイ時間 (分)
-  estimatedEndAt: number | null;   // 終了目安時刻 (ミリ秒)
-  // 将来的なタイマー分離用（現在は startedAt と同時期に計算）
-  timerStartedAt?: number | null;
+// 画面表示用のゲームデータ型
+export interface DisplayGame {
+  gameId: number;
+  name: string;
+  status: 'available' | 'in_use';
+  expectedEndAtMs: number | null; // パース済みミリ秒タイムスタンプ
+  gridPosition: number;          // 1〜N の表示位置
 }
 
-// 画面表示用の結合データ
-export interface GameWithState extends GameDefinition {
-  state: GameState;
-}
+// APIエラー分類
+export type ApiErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'INVALID_REQUEST'
+  | 'GAME_NOT_FOUND'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'INTERNAL_ERROR'
+  | 'TIMEOUT'
+  | 'NETWORK_ERROR'
+  | 'UNKNOWN';
 
-// API通信ログの記録型
-export interface ApiLogEntry {
-  id: string;
-  timestamp: string; // "HH:MM:SS"
-  type: 'REQUEST' | 'RESPONSE' | 'INFO' | 'ERROR';
-  endpoint: string;
-  data: unknown;
+export interface ApiErrorResult {
+  code: ApiErrorCode;
+  message: string;
+  isUnconfirmed: boolean; // 500, タイムアウト, 通信失敗などの「結果未確認」フラグ
 }

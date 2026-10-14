@@ -1,15 +1,4 @@
 /**
- * 終了目安時刻を計算する（ミリ秒）
- * タイマー開始ロジックを分離できるように独立関数化
- */
-export function calculateEstimatedEndTime(
-  startTimeMs: number,
-  durationMinutes: number
-): number {
-  return startTimeMs + durationMinutes * 60 * 1000;
-}
-
-/**
  * 残り秒数を取得（負の値は超過秒数）
  */
 export function getRemainingSeconds(
@@ -44,9 +33,9 @@ export function formatMinutesSeconds(totalSeconds: number): string {
  * 残り時間の表示オブジェクトを生成
  */
 export interface RemainingDisplay {
-  label: string;      // "残り" or "超過"
-  formatted: string;  // "12:30"
-  isOvertime: boolean;// 残り0以下ならtrue
+  label: string;       // "残り" or "超過"
+  formatted: string;   // "12:30" or "+01:23"
+  isOvertime: boolean; // 残り0以下ならtrue
 }
 
 export function getRemainingDisplay(

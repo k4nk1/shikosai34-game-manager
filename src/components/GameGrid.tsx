@@ -1,18 +1,20 @@
 import React from 'react';
-import { GameWithState } from '../types/game';
+import { DisplayGame } from '../types/game';
 import { GameCard } from './GameCard';
 import './GameGrid.css';
 
 interface GameGridProps {
-  games: GameWithState[];
+  games: DisplayGame[];
   now: number;
-  onStart: (gameId: string) => void;
-  onEnd: (gameId: string) => void;
+  updatingGameId: number | null;
+  onStart: (gameId: number) => void;
+  onEnd: (gameId: number) => void;
 }
 
 export const GameGrid: React.FC<GameGridProps> = ({
   games,
   now,
+  updatingGameId,
   onStart,
   onEnd,
 }) => {
@@ -21,9 +23,10 @@ export const GameGrid: React.FC<GameGridProps> = ({
       <div className="game-grid">
         {games.map((game) => (
           <GameCard
-            key={game.id}
+            key={game.gameId}
             game={game}
             now={now}
+            isUpdating={updatingGameId === game.gameId}
             onStart={onStart}
             onEnd={onEnd}
           />

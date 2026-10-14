@@ -1,40 +1,49 @@
 import React from 'react';
-import { GameWithState } from '../types/game';
+import { DisplayGame } from '../types/game';
 import { getRemainingDisplay, formatClockTime } from '../utils/timerUtils';
 import './GameCard.css';
 
 interface GameCardProps {
-  game: GameWithState;
+  game: DisplayGame;
   now: number;
-  onStart: (gameId: string) => void;
-  onEnd: (gameId: string) => void;
+  isUpdating: boolean;
+  onStart: (gameId: number) => void;
+  onEnd: (gameId: number) => void;
 }
 
-export const GameCard: React.FC<GameCardProps> = ({ game, now, onStart, onEnd }) => {
-  const isPlaying = game.state.status === 'playing';
+export const GameCard: React.FC<GameCardProps> = ({
+  game,
+  now,
+  isUpdating,
+  onStart,
+  onEnd,
+}) => {
+  const isPlaying = game.status === 'in_use';
 
-  // タイマー情報
+  // タイマー情報 (利用中の場合のみ計算)
   const remaining = isPlaying
-    ? getRemainingDisplay(game.state.estimatedEndAt, now)
+    ? getRemainingDisplay(game.expectedEndAtMs, now)
     : null;
 
   const isOvertime = remaining ? remaining.isOvertime : false;
 
   // 開始ボタンハンドラ (確認ダイアログなしで即時開始)
   const handleStartClick = () => {
-    onStart(game.id);
+    if (isUpdating) return;
+    onStart(game.gameId);
   };
 
   // 終了ボタンハンドラ
   // 要件:「確認ダイアログは時間が残っているときに終了しようとしたときだけ出してください」
   const handleEndClick = () => {
+    if (isUpdating) return;
     if (!isOvertime) {
       const ok = window.confirm(
-        `【確認】\n「${game.name}」はまだ予定時間内です。\n本当に終了しますか？`
+        `【確認】\n「${game.name}」はまだ予定時間内です。\n本当に終了（空きに戻す）しますか？`
       );
       if (!ok) return;
     }
-    onEnd(game.id);
+    onEnd(game.gameId);
   };
 
   // カードのクラス名
@@ -42,6 +51,7 @@ export const GameCard: React.FC<GameCardProps> = ({ game, now, onStart, onEnd })
     'game-card',
     isPlaying ? 'is-playing' : 'is-idle',
     isOvertime ? 'is-overtime' : '',
+    isUpdating ? 'is-updating' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -62,8 +72,7 @@ export const GameCard: React.FC<GameCardProps> = ({ game, now, onStart, onEnd })
       <div className="card-body">
         {!isPlaying ? (
           <div className="card-info-idle">
-            <span className="info-label">目安</span>
-            <span className="info-value">{game.estimatedMinutes}分</span>
+            <span className="info-idle-badge">利用可能</span>
           </div>
         ) : (
           <div className="card-info-playing">
@@ -73,7 +82,7 @@ export const GameCard: React.FC<GameCardProps> = ({ game, now, onStart, onEnd })
             </div>
             <div className="end-time-display">
               {isOvertime ? '予定 ' : '終了 '}
-              {formatClockTime(game.state.estimatedEndAt)}
+              {formatClockTime(game.expectedEndAtMs)}
             </div>
           </div>
         )}
@@ -84,19 +93,21 @@ export const GameCard: React.FC<GameCardProps> = ({ game, now, onStart, onEnd })
           <button
             type="button"
             className="btn btn-start"
+            disabled={isUpdating}
             onClick={handleStartClick}
             aria-label={`${game.name} の利用を開始`}
           >
-            ▶ 開始
+            {isUpdating ? '通信中...' : '▶ 開始'}
           </button>
         ) : (
           <button
             type="button"
             className={`btn btn-end ${isOvertime ? 'btn-end-urgent' : ''}`}
+            disabled={isUpdating}
             onClick={handleEndClick}
             aria-label={`${game.name} の利用を終了`}
           >
-            ■ 終了
+            {isUpdating ? '通信中...' : '■ 終了'}
           </button>
         )}
       </div>

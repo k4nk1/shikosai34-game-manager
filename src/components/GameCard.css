@@ -7,7 +7,7 @@
   background-color: #ffffff;
   border: 1px solid #cbd5e1;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  min-height: 108px;
+  min-height: 104px;
   box-sizing: border-box;
   transition: background-color 0.2s, border-color 0.2s, transform 0.1s;
 }
@@ -39,6 +39,10 @@
   50% {
     box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
   }
+}
+
+.game-card.is-updating {
+  opacity: 0.75;
 }
 
 /* カードヘッダー */
@@ -97,20 +101,13 @@
 
 .card-info-idle {
   display: flex;
-  align-items: baseline;
-  gap: 4px;
-  color: #64748b;
-  font-size: 12px;
+  align-items: center;
 }
 
-.info-label {
+.info-idle-badge {
   font-size: 10px;
-  color: #94a3b8;
-}
-
-.info-value {
-  font-weight: 600;
-  color: #334155;
+  color: #64748b;
+  font-weight: 500;
 }
 
 /* プレイ中情報 */
@@ -170,7 +167,12 @@
   transition: background-color 0.15s, opacity 0.15s;
 }
 
-.btn:active {
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn:active:not(:disabled) {
   opacity: 0.8;
   transform: scale(0.98);
 }
@@ -180,7 +182,7 @@
   color: #ffffff;
 }
 
-.btn-start:hover {
+.btn-start:hover:not(:disabled) {
   background-color: #059669;
 }
 
@@ -189,7 +191,7 @@
   color: #ffffff;
 }
 
-.btn-end:hover {
+.btn-end:hover:not(:disabled) {
   background-color: #475569;
 }
 
@@ -198,6 +200,6 @@
   color: #ffffff;
 }
 
-.btn-end-urgent:hover {
+.btn-end-urgent:hover:not(:disabled) {
   background-color: #dc2626;
 }

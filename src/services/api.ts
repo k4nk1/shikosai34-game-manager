@@ -1,177 +1,202 @@
-import { GameDefinition, GameState, ApiLogEntry } from '../types/game';
-import { INITIAL_GAMES } from '../data/gameData';
+import { ApiGameItem, ApiErrorResult } from '../types/game';
 
-export interface GameStartPayload {
-  gameId: string;
-  gameName: string;
-  startedAt: string;        // ISO 8601 文字列 (例: "2026-10-01T10:00:00.000Z")
-  startedAtMs: number;
-  estimatedMinutes: number;
-  estimatedEndAt: string;   // ISO 8601 文字列
-  estimatedEndAtMs: number;
-}
+const AUTH_STORAGE_KEY = 'shikosai34_auth_token';
+const DEFAULT_BASE_URL = 'https://shikosai-api-staging.sg-tera.workers.dev';
+const REQUEST_TIMEOUT_MS = 10000; // 10秒タイムアウト仕様
 
-export interface GameEndPayload {
-  gameId: string;
-  gameName: string;
-  endedAt: string;          // ISO 8601 文字列
-  endedAtMs: number;
-}
+class ApiService {
+  private baseUrl: string;
 
-type LogListener = (entry: ApiLogEntry) => void;
-
-class ApiClient {
-  private logListeners: LogListener[] = [];
-  // 将来の本番APIベースURL (例: https://api.example.com)
-  private baseUrl: string = '/api';
-
-  // ログ購読
-  public onLog(listener: LogListener): () => void {
-    this.logListeners.push(listener);
-    return () => {
-      this.logListeners = this.logListeners.filter((l) => l !== listener);
-    };
-  }
-
-  private emitLog(
-    type: ApiLogEntry['type'],
-    endpoint: string,
-    data: unknown
-  ): void {
-    const now = new Date();
-    const timestamp = [
-      String(now.getHours()).padStart(2, '0'),
-      String(now.getMinutes()).padStart(2, '0'),
-      String(now.getSeconds()).padStart(2, '0'),
-    ].join(':');
-
-    const entry: ApiLogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      timestamp,
-      type,
-      endpoint,
-      data,
-    };
-
-    console.log(`[API ${type}] ${endpoint}:`, data);
-    this.logListeners.forEach((listener) => listener(entry));
+  constructor() {
+    this.baseUrl = (
+      (import.meta.env.VITE_API_BASE_URL as string) || DEFAULT_BASE_URL
+    ).replace(/\/+$/, '');
   }
 
   /**
-   * ゲームマスターデータ取得
-   * ※将来はGET /api/games に差し替え
+   * localStorage から認証IDを取得
    */
-  public async fetchGames(): Promise<GameDefinition[]> {
-    this.emitLog('REQUEST', `${this.baseUrl}/games (GET)`, {
-      description: 'ゲーム一覧取得リクエスト',
-    });
-
-    // TODO: 実際のAPIサーバー完成時は以下の fetch を有効化
-    /*
-    const response = await fetch(`${this.baseUrl}/games`);
-    const data = await response.json();
-    this.emitLog('RESPONSE', `${this.baseUrl}/games`, data);
-    return data;
-    */
-
-    // 現在はローカル定義のデータを返す (通信シミュレーションのため擬似Promise)
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    this.emitLog('RESPONSE', `${this.baseUrl}/games (GET)`, {
-      count: INITIAL_GAMES.length,
-      games: INITIAL_GAMES,
-    });
-
-    return INITIAL_GAMES;
-  }
-
-  /**
-   * 現在の利用状況取得（ページロード時）
-   * ※将来はGET /api/status に差し替え
-   */
-  public async fetchCurrentStatuses(): Promise<Record<string, GameState>> {
-    this.emitLog('REQUEST', `${this.baseUrl}/status (GET)`, {
-      description: '全ゲームの現在の利用状況・終了予定時刻の取得リクエスト',
-    });
-
-    // TODO: 実際のAPIサーバー完成時は以下の fetch を有効化
-    /*
-    const response = await fetch(`${this.baseUrl}/status`);
-    const data = await response.json();
-    this.emitLog('RESPONSE', `${this.baseUrl}/status`, data);
-    return data;
-    */
-
-    // 現在はブラウザの localStorage から復元を試みる（リロード時のテストにも便利）
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    let savedStates: Record<string, GameState> = {};
+  public getAuthToken(): string | null {
     try {
-      const stored = localStorage.getItem('shikosai34_game_states');
-      if (stored) {
-        savedStates = JSON.parse(stored);
-      }
+      return localStorage.getItem(AUTH_STORAGE_KEY);
     } catch {
-      savedStates = {};
+      return null;
+    }
+  }
+
+  /**
+   * localStorage に認証IDを保存
+   */
+  public setAuthToken(token: string): void {
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, token.trim());
+    } catch (e) {
+      console.error('Failed to save auth token to localStorage:', e);
+    }
+  }
+
+  /**
+   * localStorage から認証IDを削除
+   */
+  public clearAuthToken(): void {
+    try {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (e) {
+      console.error('Failed to remove auth token from localStorage:', e);
+    }
+  }
+
+  /**
+   * 10秒タイムアウト付き fetch ラッパー
+   */
+  private async fetchWithTimeout(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timerId = setTimeout(() => {
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw this.createError('TIMEOUT', '通信が10秒でタイムアウトしました', true);
+      }
+      throw this.createError(
+        'NETWORK_ERROR',
+        '通信に失敗しました（オフラインまたは接続エラー）',
+        true
+      );
+    } finally {
+      clearTimeout(timerId);
+    }
+  }
+
+  private createError(
+    code: ApiErrorResult['code'],
+    message: string,
+    isUnconfirmed: boolean = false
+  ): ApiErrorResult {
+    const error = new Error(message) as Error & ApiErrorResult;
+    error.code = code;
+    error.isUnconfirmed = isUnconfirmed;
+    return error;
+  }
+
+  /**
+   * ゲーム一覧取得 (GET /v1/ctrl/games)
+   */
+  public async fetchGames(): Promise<ApiGameItem[]> {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw this.createError('UNAUTHENTICATED', '認証IDが設定されていません');
     }
 
-    this.emitLog('RESPONSE', `${this.baseUrl}/status (GET)`, {
-      description: '取得した利用状況',
-      states: savedStates,
+    const response = await this.fetchWithTimeout('/v1/ctrl/games', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
 
-    return savedStates;
+    if (response.status === 401) {
+      throw this.createError('UNAUTHENTICATED', '認証IDが正しくありません (401)');
+    }
+
+    if (!response.ok) {
+      let code: ApiErrorResult['code'] = 'UNKNOWN';
+      try {
+        const body = await response.json();
+        if (body.error) code = body.error;
+      } catch {
+        // ignore
+      }
+      throw this.createError(
+        code,
+        `一覧取得に失敗しました (HTTP ${response.status})`,
+        false
+      );
+    }
+
+    const data: ApiGameItem[] = await response.json();
+    return data;
   }
 
   /**
-   * ゲーム利用開始通知
-   * ※将来はPOST /api/games/:id/start に差し替え
+   * ゲーム状態更新 (POST /v1/ctrl/status/batch)
+   * ※本文は指定2項目（gameId, status）のみの配列
    */
-  public async notifyGameStart(payload: GameStartPayload): Promise<void> {
-    const endpoint = `${this.baseUrl}/games/${payload.gameId}/start (POST)`;
-    this.emitLog('REQUEST', endpoint, payload);
+  public async updateGameStatus(
+    gameId: number,
+    status: 'available' | 'in_use'
+  ): Promise<void> {
+    const token = this.getAuthToken();
+    if (!token) {
+      throw this.createError('UNAUTHENTICATED', '認証IDが設定されていません');
+    }
 
-    // TODO: 実際のAPIサーバー完成時は以下の fetch を有効化
-    /*
-    await fetch(`${this.baseUrl}/games/${payload.gameId}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    */
+    // 仕様に厳密に従い、余分な項目やnullは一切含めない
+    const payload = [
+      {
+        gameId,
+        status,
+      },
+    ];
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    let response: Response;
+    try {
+      response = await this.fetchWithTimeout('/v1/ctrl/status/batch', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (err: unknown) {
+      // タイムアウトや通信失敗は「結果未確認」として再送せず例外を送出
+      throw err;
+    }
 
-    this.emitLog('RESPONSE', endpoint, {
-      status: 'OK',
-      message: `${payload.gameName} の利用を開始しました`,
-    });
-  }
+    if (response.status === 401) {
+      throw this.createError('UNAUTHENTICATED', '認証IDが正しくありません (401)');
+    }
 
-  /**
-   * ゲーム利用終了通知
-   * ※将来はPOST /api/games/:id/end に差し替え
-   */
-  public async notifyGameEnd(payload: GameEndPayload): Promise<void> {
-    const endpoint = `${this.baseUrl}/games/${payload.gameId}/end (POST)`;
-    this.emitLog('REQUEST', endpoint, payload);
+    if (response.status === 500) {
+      // 500エラーもDBに反映されている可能性があるため結果未確認扱い
+      throw this.createError(
+        'INTERNAL_ERROR',
+        'サーバー内部エラーが発生しました (HTTP 500)',
+        true
+      );
+    }
 
-    // TODO: 実際のAPIサーバー完成時は以下の fetch を有効化
-    /*
-    await fetch(`${this.baseUrl}/games/${payload.gameId}/end`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    */
+    if (!response.ok) {
+      let code: ApiErrorResult['code'] = 'UNKNOWN';
+      try {
+        const body = await response.json();
+        if (body.error) code = body.error;
+      } catch {
+        // ignore
+      }
+      throw this.createError(
+        code,
+        `状態更新に失敗しました (HTTP ${response.status})`,
+        false
+      );
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
-
-    this.emitLog('RESPONSE', endpoint, {
-      status: 'OK',
-      message: `${payload.gameName} の利用を終了しました`,
-    });
+    const data = await response.json();
+    if (!data.ok) {
+      throw this.createError('UNKNOWN', '状態更新の応答が不正です');
+    }
   }
 }
 
-export const api = new ApiClient();
+export const api = new ApiService();
