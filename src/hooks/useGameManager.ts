@@ -81,7 +81,21 @@ export function useGameManager() {
 
   // 初回マウント
   useEffect(() => {
+    // URLハッシュから認証IDを読み取り・保持
+    api.initAuthTokenFromUrl();
     loadGames(true);
+
+    const handleHashChange = () => {
+      const token = api.initAuthTokenFromUrl();
+      if (token) {
+        loadGames(true);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   }, [loadGames]);
 
   // 1秒ごとの時計更新

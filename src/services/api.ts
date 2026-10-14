@@ -14,6 +14,44 @@ class ApiService {
   }
 
   /**
+   * URLハッシュから認証IDを取得して保持（localStorageに保存）
+   * 例: #aB3xK9mP2q や #token=aB3xK9mP2q
+   */
+  public initAuthTokenFromUrl(): string | null {
+    if (typeof window === 'undefined') return null;
+    const rawHash = window.location.hash.replace(/^#/, '').trim();
+    if (rawHash) {
+      let token = rawHash;
+      if (rawHash.includes('=')) {
+        try {
+          const params = new URLSearchParams(rawHash);
+          const candidate =
+            params.get('token') ||
+            params.get('auth') ||
+            params.get('access_token') ||
+            params.get('key');
+          if (candidate && candidate.trim()) {
+            token = candidate.trim();
+          }
+        } catch {
+          // ignore error
+        }
+      }
+
+      if (token) {
+        this.setAuthToken(token);
+        // URLのハッシュを消去して画面・履歴に残らないようにする
+        if (window.history.replaceState) {
+          const cleanUrl = window.location.pathname + window.location.search;
+          window.history.replaceState(null, '', cleanUrl);
+        }
+        return token;
+      }
+    }
+    return this.getAuthToken();
+  }
+
+  /**
    * localStorage から認証IDを取得
    */
   public getAuthToken(): string | null {

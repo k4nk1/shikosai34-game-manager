@@ -21,6 +21,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [tokenInput, setTokenInput] = useState(initialToken);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setTokenInput(initialToken);
+      setValidationError(null);
+    }
+  }, [isOpen, initialToken]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
