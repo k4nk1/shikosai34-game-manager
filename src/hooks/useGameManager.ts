@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { DisplayGame, ApiGameItem, ApiErrorResult } from '../types/game';
 import { api } from '../services/api';
 
-const AUTO_REFRESH_INTERVAL_MS = 60000; // 60秒同期
+const AUTO_REFRESH_INTERVAL_MS = 15000; // 15秒同期
 
 export function useGameManager() {
   const [games, setGames] = useState<DisplayGame[]>([]);
@@ -106,7 +106,7 @@ export function useGameManager() {
     return () => clearInterval(timerId);
   }, []);
 
-  // 60秒ごとの自動ポーリング & 画面復帰時の自動再取得
+  // 15秒ごとの自動ポーリング & 画面復帰時の自動再取得
   useEffect(() => {
     const intervalId = setInterval(() => {
       // 画面が表示されているときのみポーリング
