@@ -17,7 +17,7 @@
 ## API仕様連携
 - **一覧取得**: `GET /v1/ctrl/games`（Authorization: Bearer <認証ID>）
 - **状態更新**: `POST /v1/ctrl/status/batch`（`[{"gameId": 1, "status": "in_use" | "available"}]` の厳密2項目配列）
-- **ステージング環境**: `https://shikosai-api-staging.sg-tera.workers.dev`
+- **本番環境API**: `https://shikosai-api.sg-tera.workers.dev`
 
 ## 開発・ビルド手順
 

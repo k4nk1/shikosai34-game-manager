@@ -1,7 +1,7 @@
 import { ApiGameItem, ApiErrorResult } from '../types/game';
 
 const AUTH_STORAGE_KEY = 'shikosai34_auth_token';
-const DEFAULT_BASE_URL = 'https://shikosai-api-staging.sg-tera.workers.dev';
+const DEFAULT_BASE_URL = 'https://shikosai-api.sg-tera.workers.dev';
 const REQUEST_TIMEOUT_MS = 10000; // 10秒タイムアウト仕様
 
 class ApiService {
